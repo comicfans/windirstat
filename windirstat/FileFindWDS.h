@@ -24,11 +24,32 @@
 #pragma once
 #include <afx.h> // Declaration of prototype for CFileFind
 
+struct ListItem;
 class CFileFindWDS : public CFileFind
 {
 public:
+	CFileFindWDS(ListItem *listItem=NULL);
     DWORD GetAttributes() const;
     ULONGLONG GetCompressedLength() const;
+
+
+	virtual CString GetFileName() const;
+	virtual CString GetFilePath() const;
+
+	virtual BOOL GetLastWriteTime(FILETIME* pTimeStamp) const;
+
+	virtual BOOL FindFile(LPCTSTR pstrName = NULL, DWORD dwUnused = 0);
+	virtual BOOL FindNextFile();
+
+
+
+	virtual BOOL CFileFindWDS::MatchesMask(DWORD dwMask) const;
+	virtual BOOL CFileFindWDS::IsDots() const;
+
+	ListItem* GetCurrentListItem() const{ return m_currentChild ? m_currentChild : m_listItem; }
+private:
+	ListItem *m_listItem;
+	ListItem *m_currentChild;
 };
 
 #endif // __WDS_FILEFINDWDS_H__

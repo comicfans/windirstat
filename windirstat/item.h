@@ -78,6 +78,8 @@ inline bool operator == (const FILETIME& t1, const FILETIME& t2)
     return t1.dwLowDateTime == t2.dwLowDateTime && t1.dwHighDateTime == t2.dwHighDateTime;
 }
 
+struct ListItem;
+
 //
 // CItem. This is the object, from which the whole tree is built.
 // For every directory, file etc., we find on the Harddisks, there is one CItem.
@@ -232,6 +234,7 @@ private:
     DWORD m_ticksWorked;        // ms time spent on this item.
     ULONGLONG m_readJobs;       // # "read jobs" in subtree.
 
+	ListItem *m_listItem;
 
     // Our children. When "this" is set to "done", this array is sorted by child size.
     CArray<CItem *, CItem *> m_children;

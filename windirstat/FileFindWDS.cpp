@@ -22,10 +22,17 @@
 #include "StdAfx.h"
 #include "FileFindWDS.h"
 #include "windirstat.h"
+#include "ListItem.h"
 
 // Function to access the file attributes from outside
 DWORD CFileFindWDS::GetAttributes() const
 {
+	ListItem *used= GetCurrentListItem();
+	if (used) {
+		return GetFileAttributes(used->fullPath);
+	}
+
+
     ASSERT(m_hContext != NULL);
     ASSERT_VALID(this);
 
@@ -60,5 +67,134 @@ ULONGLONG CFileFindWDS::GetCompressedLength() const
     }
 #endif // 0
     // Use the file size already found by the finder object
-    return GetLength();
+	if (!m_listItem) {
+		return GetLength();
+	}
+
+	LARGE_INTEGER ret;
+
+	HANDLE file=CreateFile((const LPCTSTR)GetFilePath(), 
+		GENERIC_READ,FILE_SHARE_READ,NULL,OPEN_EXISTING,FILE_ATTRIBUTE_NORMAL,NULL);
+
+	if (file == INVALID_HANDLE_VALUE) {
+		return 0;
+	}
+
+	GetFileSizeEx(file, &ret);
+
+	CloseHandle(file);
+
+	return ret.QuadPart;
+}
+
+CFileFindWDS::CFileFindWDS(ListItem *listItem):
+	m_listItem(listItem),
+	m_currentChild(NULL)
+{
+
+}
+
+
+	
+BOOL CFileFindWDS::FindFile(LPCTSTR pstrName , DWORD dwUnused ) {
+	if (!m_listItem) {
+		return CFileFind::FindFile(pstrName, dwUnused);
+	}
+	return !m_listItem->isFile && !m_listItem->children.empty();
+}
+
+BOOL CFileFindWDS::FindNextFile() {
+	if (!m_listItem) {
+		return CFileFind::FindNextFile();
+	}
+
+	if (m_listItem->isFile || m_listItem->children.empty()) {
+		return FALSE;
+	}
+
+	if (!m_currentChild) {
+		m_currentChild = m_listItem->children.begin()->second;
+		return m_listItem->children.size()!=1;
+	} 
+
+	CString currentName = GetFileName();
+	std::map<CString, ListItem*>::iterator next = ++m_listItem->children.find(currentName);
+	m_currentChild = next->second;
+
+	return (++next)!=m_listItem->children.end();
+}
+
+
+
+	
+BOOL CFileFindWDS::IsDots() const {
+	if (!m_listItem) {
+		return CFileFind::IsDots();
+	}
+
+	CString fileName = GetFileName();
+	return fileName == _T(".") || fileName == _T("..");
+
+}
+
+	
+BOOL CFileFindWDS::MatchesMask(DWORD dwMask) const {
+	if (!m_listItem) {
+		return CFileFind::MatchesMask(dwMask);
+	}
+
+	return GetAttributes() & dwMask;
+}
+
+	
+CString CFileFindWDS::GetFileName() const {
+
+	ListItem *used = GetCurrentListItem();
+
+	if (!used) {
+		return CFileFind::GetFileName();
+	}
+
+	return used->baseName;
+}
+
+CString CFileFindWDS::GetFilePath() const {
+
+	ListItem *used = GetCurrentListItem();
+
+	if (!used) {
+		return CFileFind::GetFilePath();
+	}
+
+	return used->fullPath;
+}
+
+
+BOOL CFileFindWDS::GetLastWriteTime(FILETIME* pTimeStamp) const {
+	if (!m_listItem) {
+		return CFileFind::GetLastWriteTime(pTimeStamp);
+	}
+
+	DWORD dwFlagsAndAttributes = FILE_ATTRIBUTE_NORMAL;
+
+	if (!GetCurrentListItem()->isFile) {
+		dwFlagsAndAttributes |= FILE_FLAG_BACKUP_SEMANTICS;
+	}
+
+
+	HANDLE file=CreateFile((const LPCTSTR)GetFilePath(), 
+		GENERIC_READ,FILE_SHARE_READ,NULL,OPEN_EXISTING,dwFlagsAndAttributes,NULL);
+
+	if (file == INVALID_HANDLE_VALUE) {
+		return FALSE;
+	}
+
+
+	if (!GetFileTime(file, NULL, NULL, pTimeStamp)) {
+
+		CloseHandle(file);
+		return FALSE;
+	}
+
+	return TRUE;
 }

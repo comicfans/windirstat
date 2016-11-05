@@ -24,6 +24,7 @@
 #include "dirstatdoc.h" // GetItemColor()
 #include "mainframe.h"
 #include "item.h"
+#include "ListItem.h"
 
 #ifdef _DEBUG
 #define new DEBUG_NEW
@@ -51,6 +52,7 @@ CItem::CItem(ITEMTYPE type, LPCTSTR name, bool dontFollow)
     , m_ticksWorked(0)
     , m_readJobs(0)
     , m_attributes(0)
+	, m_listItem(NULL)
 {
     m_etype = (ITEMTYPE)(m_type & ~ITF_FLAGS); // returned by GetType
     if(GetType() == IT_FILE || dontFollow || GetType() == IT_FREESPACE || GetType() == IT_UNKNOWN || GetType() == IT_MYCOMPUTER)
@@ -77,6 +79,10 @@ CItem::~CItem()
     {
         delete m_children[i];
     }
+
+	if (!GetParent() && m_listItem) {
+		delete m_listItem;
+	}
 }
 
 CRect CItem::TmiGetRectangle() const
@@ -521,13 +527,25 @@ void CItem::UpdateLastChange()
     ZeroMemory(&m_lastChange, sizeof(m_lastChange));
     if(GetType() == IT_DIRECTORY || GetType() == IT_FILE)
     {
-        CString path = GetPath();
+
+		if (!GetParent())
+		{
+			//test if we have a file.list file. if valid,
+			//only work on list files
+			if (m_listItem) {
+				delete m_listItem;
+			}
+
+			m_listItem = ListItem::ReadFromDirectory(GetPath());
+		}
+
+		CString path = GetPath();
 
         int i = path.ReverseFind(wds::chrBackslash);
         CString basename = path.Mid(i + 1);
         CString pattern;
         pattern.Format(_T("%s\\..\\%s"), path, basename);
-        CFileFindWDS finder;
+        CFileFindWDS finder(m_listItem);
         BOOL b = finder.FindFile(pattern);
         if(!b)
         {
@@ -1066,7 +1084,7 @@ void CItem::DoSomeWork(DWORD ticks)
             CList<FILEINFO, FILEINFO> files;
 
 
-            CFileFindWDS finder;
+            CFileFindWDS finder(m_listItem);
             BOOL b = finder.FindFile(GetFindPattern());
             while(b)
             {
@@ -1255,7 +1273,7 @@ bool CItem::StartRefresh()
     // Special case IT_FILESFOLDER
     if(GetType() == IT_FILESFOLDER)
     {
-        CFileFindWDS finder;
+        CFileFindWDS finder(m_listItem);
         BOOL b = finder.FindFile(GetFindPattern());
         while(b)
         {
@@ -1315,7 +1333,7 @@ bool CItem::StartRefresh()
     // Case IT_FILE
     if(GetType() == IT_FILE)
     {
-        CFileFindWDS finder;
+        CFileFindWDS finder(m_listItem);
         BOOL b = finder.FindFile(GetPath());
         if(b)
         {
@@ -1836,6 +1854,7 @@ void CItem::AddDirectory(CFileFindWDS& finder)
     dontFollow |= GetWDSApp()->IsFolderJunction(finder.GetFilePath()) && !GetOptions()->IsFollowJunctionPoints();
 
     CItem *child = new CItem(IT_DIRECTORY, finder.GetFileName(), dontFollow);
+	child->m_listItem = finder.GetCurrentListItem();
     FILETIME t;
     finder.GetLastWriteTime(&t);
     child->SetLastChange(t);
