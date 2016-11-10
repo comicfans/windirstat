@@ -24,6 +24,9 @@
 #include "windirstat.h"
 #include "ListItem.h"
 
+#include <sys/stat.h>
+#include <sys/types.h>
+
 // Function to access the file attributes from outside
 DWORD CFileFindWDS::GetAttributes() const
 {
@@ -71,20 +74,14 @@ ULONGLONG CFileFindWDS::GetCompressedLength() const
 		return GetLength();
 	}
 
-	LARGE_INTEGER ret;
 
-	HANDLE file=CreateFile((const LPCTSTR)GetFilePath(), 
-		GENERIC_READ,FILE_SHARE_READ,NULL,OPEN_EXISTING,FILE_ATTRIBUTE_NORMAL,NULL);
-
-	if (file == INVALID_HANDLE_VALUE) {
+	struct _stat64 buf;
+	if (_wstat64((LPCTSTR)GetFilePath(),&buf) != 0) {
 		return 0;
 	}
 
-	GetFileSizeEx(file, &ret);
+	return buf.st_size;
 
-	CloseHandle(file);
-
-	return ret.QuadPart;
 }
 
 CFileFindWDS::CFileFindWDS(ListItem *listItem):
@@ -175,26 +172,12 @@ BOOL CFileFindWDS::GetLastWriteTime(FILETIME* pTimeStamp) const {
 		return CFileFind::GetLastWriteTime(pTimeStamp);
 	}
 
-	DWORD dwFlagsAndAttributes = FILE_ATTRIBUTE_NORMAL;
+	WIN32_FILE_ATTRIBUTE_DATA data;
+	BOOL ok=GetFileAttributesEx((LPCTSTR)GetFilePath(),GetFileExInfoStandard,&data);
 
-	if (!GetCurrentListItem()->isFile) {
-		dwFlagsAndAttributes |= FILE_FLAG_BACKUP_SEMANTICS;
+	if (ok) {
+		*pTimeStamp = data.ftLastWriteTime;
 	}
 
-
-	HANDLE file=CreateFile((const LPCTSTR)GetFilePath(), 
-		GENERIC_READ,FILE_SHARE_READ,NULL,OPEN_EXISTING,dwFlagsAndAttributes,NULL);
-
-	if (file == INVALID_HANDLE_VALUE) {
-		return FALSE;
-	}
-
-
-	if (!GetFileTime(file, NULL, NULL, pTimeStamp)) {
-
-		CloseHandle(file);
-		return FALSE;
-	}
-
-	return TRUE;
+	return ok;
 }
